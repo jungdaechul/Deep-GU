@@ -1,7 +1,7 @@
 
-# Medical Image Analysis Pipeline
+# T_index Calculation Pipeline
 
-This repository contains scripts for medical image processing and analysis, specifically focusing on kidney images with the identification and analysis of tumors, cysts, and sinus regions.
+This repository contains scripts for Tumor index analysis, specifically focusing on kidney CT images with the identification and analysis of tumors, cysts, and sinus regions.
 
 ## Dataset Structure
 
@@ -20,6 +20,7 @@ Data/
   - 1: Kidney
   - 2: Tumor
   - 3: Cyst
+![Kidney_img](figure/ct_kidney.png)
 
 ## Processing Steps
 
@@ -36,10 +37,10 @@ Output:
 
 ### 2. Resampling
 
-To ensure consistent voxel spacings of 1mm^3, the imaging and segmentation data are resampled.
+To ensure consistent voxel spacings of 1mm<sup>3</sup>, the imaging and segmentation data are resampled.
 
 ```bash
-python src/resampling.py --data_path 'data'
+python src/Resampling.py --data_path 'data'
 ```
 
 Output:
@@ -48,7 +49,7 @@ Output:
 
 ### 3. T Index Extraction
 
-Extracts various indices from the processed imaging data to analyze the relationship between sinus and mass (tumor or cyst).
+Extracts various indices from the processed imaging data to analyze the relationship between sinus and mass.
 
 ```bash
 python src/extract_indices.py --data_path 'data'
@@ -57,12 +58,14 @@ python src/extract_indices.py --data_path 'data'
 Output:
 - `result.npy` which includes:
   1. `dst_sn_m`: Distance between the sinus center and mass center.
-  2. `dst_mp_sn`: Mean distance of points at the mass-parenchyma contact surface from the sinus center.
-  3. `dst_msn_sn`: Mean distance of points at the mass-sinus contact surface from the sinus center.
+  2. `dst_mp_sn`: Inverse of the sum of distances from the points on the mass-parenchyma contact surface to the sinus center.
+  3. `dst_msn_sn`: Inverse of the sum of distances from the points on the mass-sinus contact surface to the sinus center.
   4. `mp_csa`: Contact surface area between mass and parenchyma.
   5. `msn_csa`: Contact surface area between mass and sinus.
 
 The T_index is calculated as the sum of `dst_mp_sn` and `dst_msn_sn`.
+
+![T_index](figure/T_index_calculation.png)
 
 ## Requirements
 
@@ -71,3 +74,11 @@ This pipeline assumes that Python and necessary libraries (`nibabel`, `numpy`, `
 ## Usage
 
 Follow the instructions in each processing step. Ensure that your data path is correctly specified relative to the script's location.
+
+
+## Automatic Segmentation from AI model (Optional)
+
+If you want to start from AI predicted mask, you have to change the file "segmentation.nii.gz" to prediction.
+We used [nn-UNet](https://github.com/MIC-DKFZ/nnUNet) to construct the AI model for kidney and tumor prediction.
+
+
