@@ -20,6 +20,8 @@ Data/
   - 1: Kidney
   - 2: Tumor
   - 3: Cyst
+
+
 ![Kidney_img](figure/ct_kidney.png)
 
 ## Processing Steps
@@ -64,6 +66,8 @@ Output:
   5. `msn_csa`: Contact surface area between mass and sinus.
 
 The T_index is calculated as the sum of `dst_mp_sn` and `dst_msn_sn`.
+
+
 
 ![T_index](figure/T_index_calculation.png)
 
