@@ -14,24 +14,37 @@ def dist_3d(first, second, affine):
     second_mm = np.dot(affine, np.append(second, 1))[:3]
     return distance.euclidean(first_mm, second_mm)
 
-def distance_extract(sinus_data, kidney_data, mass_data, affine):
-    sinus_center = center_of_mass(sinus_data)
+def distance_extract(main_sinus_data, main_kid_data, mass_data, affine):
+    # 1. mass_center - sinus_center distance
+    sinus_center = center_of_mass(main_sinus_data)
     mass_center = center_of_mass(mass_data)
-    mass_dilation = binary_dilation(mass_data)
-
-    # Surface to center distances
     dst_sn_m = dist_3d(sinus_center, mass_center, affine)
-    mp_surface_points = np.argwhere((mass_dilation & kidney_data) == 1)
-    msn_surface_points = np.argwhere((mass_dilation & sinus_data) == 1)
 
-    # Calculate mean surface distances
-    dst_mp_sn = np.mean([dist_3d(sinus_center, pt, affine) for pt in mp_surface_points])
-    dst_msn_sn = np.mean([dist_3d(sinus_center, pt, affine) for pt in msn_surface_points])
+    # 2. mass_parenchyma_surface - sinus_center distance (3D)
+    mass_dil_data = binary_dilation(mass_data)
+    x,y,z = np.where((mass_dil_data==1) & (main_kid_data==1))
+    mp_ct=0
+    dst_mp_sn=0
+    if len(x)!=0:
+        for a,b,c in zip(x,y,z):
+            dst_mp_sn += 1/dist_3d(sinus_center, (a,b,c), affine)
+            mp_ct+=1
+            
+    # 3. mass_sinus_surface - sinus_center distance (3D)
+    x,y,z = np.where((mass_dil_data==1) & (main_sinus_data==1))
+    msn_ct=0
+    dst_msn_sn=0
+    if len(x)!=0:
+        for a,b,c in zip(x,y,z):
+            dst_msn_sn += 1/dist_3d(sinus_center, (a,b,c), affine) 
+            msn_ct+=1
+            
+    #print(q)
+    sc=abs(affine[0][0])
 
-    # Calculate cross-sectional areas
-    mp_csa = len(mp_surface_points) * np.abs(np.linalg.det(affine[:3, :3]))
-    msn_csa = len(msn_surface_points) * np.abs(np.linalg.det(affine[:3, :3]))
-
+    mp_csa=mp_ct*sc*sc*sc
+    msn_csa=msn_ct*sc*sc*sc
+            
     return dst_sn_m, dst_mp_sn, dst_msn_sn, mp_csa, msn_csa
 
 def select_main_regions(kidney_labels, sinus_labels, mass_data):
