@@ -1,0 +1,104 @@
+import os
+import argparse
+import numpy as np
+import nibabel as nib
+from scipy.ndimage import center_of_mass, binary_dilation
+from scipy.spatial import distance
+from skimage.measure import label
+from batchgenerators.utilities.file_and_folder_operations import subfolders
+from multiprocessing import Pool
+from tqdm import tqdm
+
+def dist_3d(first, second, affine):
+    first_mm = np.dot(affine, np.append(first, 1))[:3]
+    second_mm = np.dot(affine, np.append(second, 1))[:3]
+    return distance.euclidean(first_mm, second_mm)
+
+def distance_extract(sinus_data, kidney_data, mass_data, affine):
+    sinus_center = center_of_mass(sinus_data)
+    mass_center = center_of_mass(mass_data)
+    mass_dilation = binary_dilation(mass_data)
+
+    # Surface to center distances
+    dst_sn_m = dist_3d(sinus_center, mass_center, affine)
+    mp_surface_points = np.argwhere((mass_dilation & kidney_data) == 1)
+    msn_surface_points = np.argwhere((mass_dilation & sinus_data) == 1)
+
+    # Calculate mean surface distances
+    dst_mp_sn = np.mean([dist_3d(sinus_center, pt, affine) for pt in mp_surface_points])
+    dst_msn_sn = np.mean([dist_3d(sinus_center, pt, affine) for pt in msn_surface_points])
+
+    # Calculate cross-sectional areas
+    mp_csa = len(mp_surface_points) * np.abs(np.linalg.det(affine[:3, :3]))
+    msn_csa = len(msn_surface_points) * np.abs(np.linalg.det(affine[:3, :3]))
+
+    return dst_sn_m, dst_mp_sn, dst_msn_sn, mp_csa, msn_csa
+
+def select_main_regions(kidney_labels, sinus_labels, mass_data):
+    mass_center = center_of_mass(mass_data)
+    kidney1_data = (kidney_labels == 1).astype(int)
+    kidney2_data = (kidney_labels == 2).astype(int)
+    sinus1_data = (sinus_labels == 1).astype(int)
+    sinus2_data = (sinus_labels == 2).astype(int)
+
+    # Determine which kidney and sinus are closest to the mass
+    dst_kidney1 = distance.euclidean(center_of_mass(kidney1_data), mass_center)
+    dst_kidney2 = distance.euclidean(center_of_mass(kidney2_data), mass_center)
+    dst_sinus1 = distance.euclidean(center_of_mass(sinus1_data), mass_center)
+    dst_sinus2 = distance.euclidean(center_of_mass(sinus2_data), mass_center)
+
+    main_kidney_data = kidney1_data if dst_kidney1 < dst_kidney2 else kidney2_data
+    main_sinus_data = sinus1_data if dst_sinus1 < dst_sinus2 else sinus2_data
+
+    return main_kidney_data, main_sinus_data
+
+def index_extract(folder):
+    seg_file = os.path.join(folder, 'segmentation_sinus_r.nii.gz')
+    if not os.path.isfile(seg_file):
+        print(f"Segmentation file not found: {seg_file}")
+        return None
+
+    seg = nib.load(seg_file)
+    seg_data = seg.get_fdata()
+
+    sinus_data = (seg_data == 4).astype(int)
+    kidney_data = (seg_data == 1).astype(int)
+    mass_data = (seg_data == 2).astype(int)
+
+    if np.unique(mass_data).size < 2:
+        print(f"No mass data found in {folder}. Skipping.")
+        return None
+
+    kidney_labels = label(kidney_data)
+    sinus_labels = label(sinus_data)
+
+    if np.max(kidney_labels) < 2 or np.max(sinus_labels) < 2:
+        print(f"Not enough labels found in kidney or sinus data in {folder}. Skipping.")
+        return None
+
+    # Split and select the main regions based on proximity to the mass
+    main_kidney_data, main_sinus_data = select_main_regions(kidney_labels, sinus_labels, mass_data)
+
+    # Perform distance calculations
+    return distance_extract(main_sinus_data, main_kidney_data, mass_data, seg.affine)
+
+def main_extract_save(folder):
+    result = index_extract(folder)
+    if result is not None:
+        dst_sn_m, dst_mp_sn, dst_msn_sn, mp_csa, msn_csa = result
+        result_array = np.array([int(folder.split('/')[-1].split('_')[0]), dst_sn_m, dst_mp_sn, dst_msn_sn, mp_csa, msn_csa])
+        save_path = os.path.join(folder, 'result.npy')
+        np.save(save_path, result_array)
+        print(f"Results saved to: {save_path}")
+
+def main(args):
+    folders = subfolders(args.data_path, join=False)
+    with Pool(args.num_processes) as pool:
+        list(tqdm(pool.imap(main_extract_save, [os.path.join(args.data_path, folder) for folder in folders]), total=len(folders)))
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Extract indices from medical images and save the results.")
+    parser.add_argument('--data_path', type=str, required=True, help='Base path for the data containing imaging files')
+    parser.add_argument('--num_processes', type=int, default=4, help='Number of parallel processes to use')
+    args = parser.parse_args()
+    main(args)
