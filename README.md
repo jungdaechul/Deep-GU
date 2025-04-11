@@ -1,7 +1,7 @@
 
 # T_index Calculation Pipeline
 
-This repository contains scripts for Tumor index analysis, specifically focusing on kidney CT images with the identification and analysis of tumors, cysts, and sinus regions.
+This repository contains scripts for Tumor index (T_index) analysis, specifically focusing on kidney CT images with the identification and analysis of tumors, cysts, and sinus regions.
 
 ## Dataset Structure
 
